@@ -13,6 +13,7 @@
 #include <curthread.h>
 #include <vnode.h>
 #include <vfs.h>
+#include <kern/unistd.h>
 
 
 
@@ -101,7 +102,7 @@ mips_syscall(struct trapframe *tf)
 		break;
 
 		case SYS_execv:
-		err = sys_execv(tf->tf_a0, tf->tf_a1);
+		err = sys_execv(tf);
 		break;
 
 		default:
@@ -138,23 +139,42 @@ mips_syscall(struct trapframe *tf)
 }
 
 
-int sys_execv(const char *program, char **args) {
-	args++;
-	int num_args = 0;
+int sys_execv(struct trapframe *tf) {
 	
-	while (args != NULL) {
-		if(*args == NULL) {
-			break;
-		} else {
-			num_args++;
-			kprintf("arg: %s\n", *args);
-			args++;
-		}
-		
+	char *prog = (char *) tf->tf_a0;
+	char **args = (char **) tf->tf_a1;
+
+	int argc = 0; //to count number of arguments
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+	struct addrspace *old_addrspace;
+
+	/* Open the file. */
+	char **arg_array = args;
+	int i = 0;
+	while (args[i] != NULL) {
+		argc++;
+		i++;
+	}
+	//kprintf("args\n");
+	char *program = (char *)kmalloc(strlen(args[0]) + 1);
+	copyinstr(prog, program, strlen(args[0])+1, NULL);
+
+	//kprintf("program: %s\n", program);
+
+	char* argv[argc];
+	int j;
+	for(j = 0; j < argc; j++) {
+		argv[j] = (char *)kmalloc(strlen(args[j]) + 1);
+		copyinstr(args[j], argv[j], strlen(args[j])+1, NULL);
 	}
 
+	//kprintf("argv[1]: %s\n", argv[1]);
 	
-	return 0;
+	
+	int ret = runprogram(program, argv, argc);
+	return ret;
 }
 
 int sys_getpid() {
@@ -179,9 +199,9 @@ md_forkentry_mod(struct trapframe *tf, struct addrspace *as)
 	//temp_tf = *cpy_tf;
 	temp_tf.tf_v0 = 0;
 	temp_tf.tf_a3 = 0;
-	kprintf("pc before: %x\n", temp_tf.tf_epc);
+	//kprintf("pc before: %x\n", temp_tf.tf_epc);
 	temp_tf.tf_epc += 4;
-	kprintf("pc after: %x\n", temp_tf.tf_epc);
+	//kprintf("pc after: %x\n", temp_tf.tf_epc);
 
 	//curthread->t_vmspace = cur_asspace;
 	
